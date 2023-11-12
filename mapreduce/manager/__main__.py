@@ -42,6 +42,12 @@ class Manager:
 
     def __init__(self, host, port):
         """Construct a Manager instance and start listening for messages."""
+        self.signals = {"shutdown" : 0}
+        self.workers = []
+        self.workers_order = {}
+        self.job_id = 0
+        self.current_tasks = []
+        self.job_queue = Queue()
 
         LOGGER.info(
             "Starting manager host=%s port=%s pwd=%s",
@@ -121,7 +127,6 @@ class Manager:
                         reduce_input_files = []
                         for file in matching_files:
                             reduce_input_files.append(str(file))
-                        print(matching_files)
                         task_msg = {
                             "message_type": "new_reduce_task",
                             "task_id": i,
@@ -162,6 +167,7 @@ class Manager:
                     except ConnectionRefusedError:
                         print("CONNECTION REFUSED")
                         self.dead_worker(worker)
+                        # in this path, task will continue to look for a worker
                     else:
                         # Message successfully sent
                         print("MESSAGE SENT SUCCESSFULLY")
@@ -178,14 +184,20 @@ class Manager:
         while self.signals["shutdown"] == 0:
             time.sleep(2)
             for worker in self.workers:
-                worker.missed_pings += 1
-                if worker.missed_pings >= 5:
-                    self.dead_worker(worker)
+                if worker.status != "dead":
+                    worker.missed_pings += 1
+                    if worker.missed_pings >= 5:
+                        self.dead_worker(worker)
+
 
     def dead_worker(self, worker):
         """Handle a worker that has died."""
         worker.status = "dead"
-        pass # IMPLIMENT ME
+        dead_task = worker.task
+        dead_job_id = worker.current_job_id
+        worker.task = None
+        worker.current_job_id = None
+        self.send_task(dead_task, dead_job_id)
 
 
     def handle_heartbeat(self, heartbeat_msg):
@@ -239,14 +251,26 @@ class Manager:
         key = (worker_host, worker_port)
         worker_index = self.workers_order[key]
         worker = self.workers[worker_index]
-        worker.finish_task(task_id)
-        self.current_tasks[task_id] = "complete"
+        if worker.task["task_id"] == task_id:
+            worker.finish_task(task_id)
+            self.current_tasks[task_id] = "complete"
 
 
 
     def re_register(self, worker):
         """Handle cases of a worker trying to re-register."""
-        pass # IMPLIMENT ME
+        self.dead_worker(worker)
+        key = (worker.host, worker.port)
+        new_worker = self.RemoteWorker(worker["host"], worker["port"])
+        self.workers_order[key] = len(self.workers)
+        self.workers.append(new_worker)
+        print("REGISTERING A WORKER")
+        ack = {"message_type": "register_ack"}
+        try:
+            tcp_client(worker["host"], worker["port"], ack)
+        except ConnectionRefusedError:
+            self.dead_worker(new_worker)
+        # IMPLEMENT assign new worker to job...
 
     def initiate_shutdown(self):
         '''Shut down all workers and then the manager.'''
@@ -283,6 +307,8 @@ class Manager:
         def __init__(self, host, port):
             self.host = host
             self.port = port
+            self.status = "None"
+            self.current_job_id = "None"
             self.status = "ready"
             self.missed_pings = 0
 
@@ -291,21 +317,15 @@ class Manager:
             """Assign task to this Worker."""
             self.task = task_msg
             self.status = "busy"
-            self.job_id = job_id
+            self.current_job_id = job_id
 
         def finish_task(self, task_id):
             if task_id != self.task["task_id"]:
                 print("\n\nRecieved message for wrong task!!!!!\n\n")
             else:
-
                 self.task = None
-                self.job_id = None
+                self.current_job_id = None
                 self.status = "ready"
-
-
-        def unassign_task(self, task):
-            """Unassign task and return it, e.g., when Worker is marked dead."""
-            pass
     # end class RemoteWorker
 
     # Sub-class Job of Manager

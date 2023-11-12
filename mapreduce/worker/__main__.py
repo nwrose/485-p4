@@ -38,6 +38,7 @@ class Worker:
     # Class constructor
     def __init__(self, host, port, manager_host, manager_port):
         """Construct a Worker instance and start listening for messages."""
+        self.signals = {"shutdown": 0}
         LOGGER.info(
             "Starting worker host=%s port=%s pwd=%s",
             host, port, os.getcwd(),
