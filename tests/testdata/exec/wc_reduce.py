@@ -10,7 +10,11 @@ import itertools
 
 def reduce_one_group(key, group):
     """Reduce one group."""
-    assert False, "IMPLEMENT ME"
+    word_count = 0
+    for line in group:
+        count = line.partition("\t")[2]
+        word_count += int(count)
+    print(f"{key} {word_count}")
 
 
 def keyfunc(line):
