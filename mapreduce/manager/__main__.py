@@ -4,12 +4,12 @@ import tempfile
 import logging
 import json
 import time
-import click
 import threading
 import pathlib
 import shutil
-from mapreduce.utils import tcp_server, udp_server, tcp_client, udp_client
 from queue import Queue
+import click
+from mapreduce.utils import tcp_server, udp_server, tcp_client
 
 # Configure logging
 LOGGER = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ class Manager:
         # This is the fault tolerance thread
         fault_thread = threading.Thread(target=self.fault_tolerance, args=())
         fault_thread.start()
-        time.sleep(1)
+        time.sleep(.1)
 
         # This is the main thread
         self.main_thread()
@@ -92,7 +92,7 @@ class Manager:
         """Run the main thread."""
         # Main thread (this one) does the job handling
         while self.signals["shutdown"] == 0:
-            time.sleep(0.5)
+            time.sleep(0.1)
             if not self.job_queue.empty():
                 job_to_do = self.job_queue.get()
                 path_out = job_to_do.output_directory
@@ -359,6 +359,10 @@ class Manager:
             self.reducer_executable = msg["reducer_executable"]
             self.num_mappers = msg["num_mappers"]
             self.num_reducers = msg["num_reducers"]
+
+        def set_job_id(self, job_id):
+            """Set the job_id for this Job."""
+            self.job_id = job_id
     # end class Job
 # end class Manager
 
