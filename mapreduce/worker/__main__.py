@@ -68,7 +68,7 @@ class Worker:
             args=(host, port, self.signals, self.handle_msg)
         )
         tcp_thread.start()
-        time.sleep(.1)
+        time.sleep(1)
         ready_msg = {
             "message_type": "register",
             "worker_host": host,
@@ -89,7 +89,7 @@ class Worker:
             self.heartbeat_thread = threading.Thread(
                 target=self.handle_heartbeat, args=())
             self.heartbeat_thread.start()
-            time.sleep(.1)
+            time.sleep(1)
         elif msg["message_type"] == "new_map_task":
             self.map_files(msg)
         elif msg["message_type"] == "new_reduce_task":
@@ -108,7 +108,6 @@ class Worker:
             absolute_path = os.path.join(tmpdir, file_path)
             with open(absolute_path, 'a', encoding="utf-8") as outfile:
                 with ExitStack() as stack:
-                    # I NEVER GET HERE
                     infiles = [
                         stack.enter_context(open(fname, encoding="utf-8"))
                         for fname in msg["input_paths"]]
@@ -143,22 +142,42 @@ class Worker:
             prefix=f"mapreduce-local-task{msg['task_id']:05d}-"
         ) as tmpdir:
             with ExitStack() as in_stack:
-                infiles = [in_stack.enter_context(open(fname, 'r', encoding="utf-8")) for fname in msg["input_paths"]]
+                infiles = [
+                    in_stack.enter_context(
+                        open(fname, 'r', encoding="utf-8")
+                    )
+                    for fname in msg["input_paths"]
+                ]
                 with ExitStack() as out_stack:
                     out_names = []
                     for i in range(msg["num_partitions"]):
-                        out_path_full = os.path.join(tmpdir, f"maptask{msg['task_id']:05d}-part{i:05d}")
-                        out_names.append(out_path_full)
-                    outfiles = [out_stack.enter_context(open(fname, 'a', encoding="utf-8")) for fname in out_names]
+                        out_names.append(
+                            os.path.join(
+                                tmpdir,
+                                f"maptask{msg['task_id']:05d}-part{i:05d}"
+                            )
+                        )
+                    outfiles = [
+                        out_stack.enter_context(
+                            open(fname, 'a', encoding="utf-8")
+                        )
+                        for fname in out_names
+                    ]
                     for infile in infiles:
-                        with subprocess.Popen([msg["executable"]],stdin=infile,stdout=subprocess.PIPE,text=True) as map_process:
+                        with subprocess.Popen(
+                            [msg["executable"]],
+                            stdin=infile,
+                            stdout=subprocess.PIPE,
+                            text=True
+                        ) as map_process:
                             for line in map_process.stdout:
-                                key = line.split('\t')[0]
-                                hexdigest = hashlib.md5(key.encode("utf-8")).hexdigest()
-                                keyhash = int(hexdigest, base=16)
-                                partition_number = keyhash % msg["num_partitions"]
-                                outfiles[partition_number].write(line)
-            for filename in [os.path.join(tmpdir, file_name) for file_name in os.listdir(tmpdir)]:
+                                hexdigest = hashlib.md5(
+                                    line.split('\t')[0].encode(
+                                        "utf-8")).hexdigest()
+                                outfiles[int(hexdigest, base=16) %
+                                         msg["num_partitions"]].write(line)
+            for filename in [os.path.join(tmpdir, file_name)
+                             for file_name in os.listdir(tmpdir)]:
                 subprocess.run(["sort", "-o", filename, filename], check=True)
                 shutil.move(filename, msg["output_directory"])
         tcp_client(self.manager_host, self.manager_port, {
@@ -178,26 +197,6 @@ class Worker:
         while self.signals["shutdown"] == 0:
             time.sleep(2)
             udp_client(self.manager_host, self.manager_port, heartbeat_msg)
-
-    def execute_infile(self, infile, msg, tmpdir):
-        """Execute the passed in executable on the passed in files."""
-        with subprocess.Popen(
-            [msg["executable"]],
-            stdin=infile,
-            stdout=subprocess.PIPE,
-            text=True
-        ) as map_process:
-            for line in map_process.stdout:
-                key = line.split('\t')[0]
-                hexdigest = hashlib.md5(key.encode("utf-8")).hexdigest()
-                keyhash = int(hexdigest, base=16)
-                partition_number = keyhash % msg["num_partitions"]
-                file_path = \
-                    f"maptask{msg['task_id']:05d}-part{partition_number:05d}"
-                absolute_path = os.path.join(tmpdir, file_path)
-                with open(absolute_path, 'a', encoding="utf-8") as file:
-                    # Write the new line to the file
-                    file.write(line)
 
 
 @click.command()

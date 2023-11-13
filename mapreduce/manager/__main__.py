@@ -78,7 +78,7 @@ class Manager:
         # This is the fault tolerance thread
         fault_thread = threading.Thread(target=self.fault_tolerance, args=())
         fault_thread.start()
-        time.sleep(.1)
+        time.sleep(1)
 
         # This is the main thread
         self.main_thread()
