@@ -1,10 +1,14 @@
+"""Utils package.
+
+This package is for code shared by the Manager and the Worker.
+"""
+
 import socket
 import json
 
 
 def tcp_server(host, port, signals, handle_func):
     """Start a tcp server."""
-    
     # Create an INET, STREAMing socket, this is TCP
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 
@@ -18,7 +22,7 @@ def tcp_server(host, port, signals, handle_func):
         sock.settimeout(1)
 
         while signals["shutdown"] == 0:
-            # Wait for a connection for 1s.  The socket library avoids consuming
+            # Wait for a connection for 1s, socket library avoids consuming
             # CPU while waiting for a connection.
             try:
                 clientsocket, address = sock.accept()
@@ -54,7 +58,7 @@ def tcp_server(host, port, signals, handle_func):
             try:
                 message_dict = json.loads(message_str)
             except json.JSONDecodeError:
-                continue 
+                continue
             handle_func(message_dict)
 
 
@@ -80,6 +84,7 @@ def udp_server(host, port, signals, handle_func):
             message_dict = json.loads(message_str)
             handle_func(message_dict)
 
+
 def tcp_client(host, port, message_dict):
     """Send message over network using TCP."""
     # create an INET, STREAMing socket, this is TCP
@@ -91,6 +96,7 @@ def tcp_client(host, port, message_dict):
         # send a message
         message = json.dumps(message_dict)
         sock.sendall(message.encode('utf-8'))
+
 
 def udp_client(host, port, message_dict):
     """Send message over network using UDP."""
